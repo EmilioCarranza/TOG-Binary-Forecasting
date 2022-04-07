@@ -4,7 +4,7 @@ Created on Wed Mar 16 20:20:54 2022
 
 @author: Emilio
 """
-a
+#test
 # -- Visualization
 import ccxt as ccxt
 import plotly.graph_objects as go
