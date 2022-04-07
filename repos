@@ -1,0 +1,6 @@
+import ccxt as ccxt
+import plotly.graph_objects as go
+#import chart_studio.plotly as py
+import pandas as pd
+import numpy as np
+import data as dt
