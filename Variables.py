@@ -1,4 +1,4 @@
-# Repositorios
+# Packages
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
@@ -154,23 +154,83 @@ ohlc = pd.DataFrame(ohlcvs)
 ohlc.columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
 ohlc['timestamp'] = pd.to_datetime(ohlc['timestamp'])
 sign = []
-for i in range(497):
-    sign1 = ohlc["open"][i + 1] - ohlc["close"][i]
+for i in range(len(ohlc)):
+    sign1 = ohlc["close"][i] - ohlc["open"][i]
     sign.append(sign1)
-for i in range(497):
-    if sign[i] <= 0:
-        sign[i] = 0
-    else:
-        sign[i] = 1
+for i in range(len(ohlc)):
+    if sign[i] <= 0:sign[i]=0
+    else: sign[i] = 1
 print(sign)
 
+# Martingala
+ohlc['sign']=sign
+ohlc['sign_t1']=ohlc['sign'].shift(+1)
+ohlc= ohlc.fillna(0)
+ohlc2= pd.DataFrame(ohlc)
 # Feature engineering 100 candidate features
+# k fault
+from gplearn.genetic import SymbolicRegressor
+from sklearn.genetic import RandomForestRegressor
+from sklearn.tree import DecisionTreeRegressor
+from sympy import *
 
+X1= ohlc2[:,:-2]
+y1= ohlc2['sign']
+y_true = y
+X_train, X_test, y_train, y_test = train_test_split(X, y,
+    test_size=0.30, random_state=42)
+
+# First Test
+function_set = ['add', 'sub', 'mul', 'div','cos','sin','neg','inv']
+est_gp = SymbolicRegressor(population_size=5000,function_set=function_set,
+                           generations=40, stopping_criteria=0.01,
+                           p_crossover=0.7, p_subtree_mutation=0.1,
+                           p_hoist_mutation=0.05, p_point_mutation=0.1,
+                           max_samples=0.9, verbose=1,
+                           parsimony_coefficient=0.01, random_state=0,
+                          feature_names=X_train.columns)
+converter = {
+    'sub': lambda x, y : x - y,
+    'div': lambda x, y : x/y,
+    'mul': lambda x, y : x*y,
+    'add': lambda x, y : x + y,
+    'neg': lambda x    : -x,
+    'pow': lambda x, y : x**y,
+    'sin': lambda x    : sin(x),
+    'cos': lambda x    : cos(x),
+    'inv': lambda x: 1/x,
+    'sqrt': lambda x: x**0.5,
+    'pow3': lambda x: x**3
+}
+est_gp.fit(X_train, y_train)
+print('R2:',est_gp.score(X_test,y_test))
+next_e = sympify((est_gp._program), locals=converter)
+next_e
 
 # Preprocessing Log, Scale, Standardize (mean, median), Normalize
+from sklearn.linear_model import ElasticNet
 
-# Model Training  martingala, maquina de soporte vectorial, red neuronal
+X= ohlc2.iloc[:,:-2]
+y= ohlc2['sign']
+regr = ElasticNet(random_state=0)
+regr.fit(X, y)
 
+print(regr.coef_)
+
+print(regr.intercept_)
+
+print(regr.predict([[0, 0]]))
+# Model Training  , maquina de soporte vectorial, red neuronal, regresion logicstica multiple
+from collections import Counter
+
+print(X.shape, y .shape)
+print(Counter(y))
+
+# define the multinomial logistic regression model
+from sklearn.linear_model import LogisticRegression
+model = LogisticRegression(multi_class='multinomial', solver='lbfgs')
+
+model.fit(X, y)
 # Model Evaluation
 
 # Model Explain-ability por como salió y significado de lo que se obtuvo.
