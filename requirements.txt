@@ -1,0 +1,12 @@
+pandas
+numpy
+ccxt
+plotly
+matplotlib
+scipy
+scikit-learn
+gplearn
+sympy
+mplfinance
+seaborn
+statsmodels

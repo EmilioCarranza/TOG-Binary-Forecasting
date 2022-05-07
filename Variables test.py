@@ -10,11 +10,10 @@ from matplotlib import pyplot
 import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import confusion_matrix, accuracy_score, recall_score, precision_score, f1_score
+from sklearn.metrics import confusion_matrix, accuracy_score, recall_score, precision_score
 from sklearn.preprocessing import Normalizer
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import scale
-
 # Call new datasets
 ordbook = pd.read_parquet('ordbook.parquet')
 pubtrade = pd.read_parquet('pubtrade.parquet')
@@ -236,6 +235,7 @@ std = ohlc2.std()
 # Preprocessing Log, Scale, Standardize (mean, median), Normalize
 X = ohlc2.iloc[:, 4:-2]
 y = ohlc2['sign']
+y_true = y
 # Normalizer
 transformer = Normalizer().fit(X)  # fit does nothing.
 transformed = transformer.transform(X)
@@ -247,10 +247,6 @@ X_scale = scale(X)
 scaler = StandardScaler()
 scaled = scaler.fit_transform(X)
 X_standard = scaled
-
-# k fault Symbolic Regressor
-y_true = y
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.30, random_state=False)
 
 # Heat map
 correla = pd.DataFrame(X_scale, index=ohlc2.index)
@@ -270,6 +266,11 @@ heat2.set_xticklabels(
     horizontalalignment='right'
 )
 plt.show()
+
+# k fault Symbolic Regressor
+x_test = pd.DataFrame(X_scale,index = X.index, columns= X.columns)
+X_train, X_test, y_train, y_test = train_test_split(x_test, y, test_size=0.30, random_state=False)
+
 # First Test
 function_set = ['add', 'sub', 'mul', 'div', 'cos', 'sin', 'neg', 'inv']
 est_gp = SymbolicRegressor(population_size=5000, function_set=function_set,
@@ -298,7 +299,7 @@ print('R2:', est_gp.score(X_test, y_test))
 next_e = sympify(est_gp.program, locals=converter)
 
 # Logistic Regression
-x_train, x_test, y_train, y_test = train_test_split(X_standard, y, test_size=0.20, random_state=False)
+x_train, x_test, y_train, y_test = train_test_split(X_scale, y, test_size=0.20, random_state=False)
 # model fit
 logistic_model = LogisticRegression(random_state=None, penalty='elasticnet', solver='saga', l1_ratio=1, max_iter=4000)
 logistic_model.fit(x_train, y_train)
@@ -314,16 +315,17 @@ print(confusion_mat)
 
 # Model Evaluation
 y_pred2 = pd.DataFrame(y_pred)
-# recall
+# recall tp / (tp + fn)
 recall = recall_score(y_test, y_pred, average='micro')
 print(recall)
-# Precession
+# Precision tp / (tp + fp)
 precision = precision_score(y_test, y_pred, average='micro')
 print(precision)
-# F1
-f1_score = f1_score(y_test, y_pred2, average='weighted')
+# F1 F1 = 2 * (precision * recall) / (precision + recall)
+f1_score = 2*(precision*recall)/(precision + recall)
 print(f1_score)
 # accuracy
 accuracy = accuracy_score(y_test, y_pred) * 100
+print(accuracy)
 
 # Model Explain-ability por como salió y significado de lo que se obtuvo.

@@ -7,8 +7,11 @@ from scipy.stats import kurtosis
 import matplotlib.pyplot as plt
 from matplotlib import pyplot
 import ccxt
+from collections import Counter
 
 # import orderbooks and publictrades with pickle.
+from sklearn.model_selection import train_test_split
+
 orderbooks_file = open('orderbooks.pkl', 'rb')
 orderbooks = pickle.load(orderbooks_file)
 print(orderbooks)
@@ -62,6 +65,11 @@ for i in range(100):
     vwap_ask1 = (priceask[i] * volumeask[i]) / total_ask_volume
     vwap_ask.append(vwap_ask1)
 imb_dif = total_bid_volume - total_ask_volume
+
+# Features Public Trade
+trades = (len(publictrades['binance']))
+total_volume = (publictrades['binance']['amount']).sum()
+print(Counter(publictrades['binance']['side']))
 # statics , spread midprice, weighted mid price , total volume, bid volume, ask volume
 # dynamics diff midprice( diferencia entre dos mid prices), midprice return valor final - valor inicial,
 # sign(midprice return)
@@ -95,7 +103,7 @@ quantiles = (path_orderbooks['bid_price']).describe()
 
 q1 = np.percentile((path_orderbooks['bid_price']), 25)
 q3 = np.percentile((path_orderbooks['bid_price']), 75)
-# 2.- Atípicos "lado minimo" <= q1-[q3-q1]*1.5 todo precio abajo , seria atípico
+# 2.- Atípicos "lado minimo" <= q1-[q3-q1]*1.5todo precio abajo , seria atípico
 lado_minimo = q1 - (q3 - q1) * 1.5
 #     Atípicos "lado maximo" >= q3+[q3-q1]*1.5
 lado_maximo = q3 + (q3 - q1) * 1.5
@@ -143,7 +151,7 @@ fig.show()
 # EDA II
 
 # Resample data to 4h
-
+public = pd.DataFrame(publictrades['binance'])
 df_orderbooks = pd.DataFrame(orderbooks)
 orderbook4h = df_orderbooks.resample('4H', ).sum()
 orderbook4ha = pd.DataFrame(orderbook_b)
@@ -158,79 +166,75 @@ for i in range(len(ohlc)):
     sign1 = ohlc["close"][i] - ohlc["open"][i]
     sign.append(sign1)
 for i in range(len(ohlc)):
-    if sign[i] <= 0:sign[i]=0
-    else: sign[i] = 1
-print(sign)
+    if sign[i] <= 0:
+        sign[i] = 0
+    else:
+        sign[i] = 1
+ohlc['sign'] = sign
+print(ohlc)
 
 # Martingala
-ohlc['sign']=sign
-ohlc['sign_t1']=ohlc['sign'].shift(+1)
-ohlc= ohlc.fillna(0)
-ohlc2= pd.DataFrame(ohlc)
+ohlc['sign'] = sign
+ohlc['sign_t1'] = ohlc['sign'].shift(+1)
+ohlc = ohlc.fillna(0)
+ohlc2 = pd.DataFrame(ohlc)
 # Feature engineering 100 candidate features
 # k fault
 from gplearn.genetic import SymbolicRegressor
-from sklearn.genetic import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
 from sympy import *
 
-X1= ohlc2[:,:-2]
-y1= ohlc2['sign']
+X = ohlc2.iloc[:, 1:-2]
+y = ohlc2['sign']
 y_true = y
 X_train, X_test, y_train, y_test = train_test_split(X, y,
-    test_size=0.30, random_state=42)
+                                                    test_size=0.30, random_state=False)
 
 # First Test
-function_set = ['add', 'sub', 'mul', 'div','cos','sin','neg','inv']
-est_gp = SymbolicRegressor(population_size=5000,function_set=function_set,
+function_set = ['add', 'sub', 'mul', 'div', 'cos', 'sin', 'neg', 'inv']
+est_gp = SymbolicRegressor(population_size=5000, function_set=function_set,
                            generations=40, stopping_criteria=0.01,
                            p_crossover=0.7, p_subtree_mutation=0.1,
                            p_hoist_mutation=0.05, p_point_mutation=0.1,
                            max_samples=0.9, verbose=1,
                            parsimony_coefficient=0.01, random_state=0,
-                          feature_names=X_train.columns)
+                           feature_names=X_train.columns)
 converter = {
-    'sub': lambda x, y : x - y,
-    'div': lambda x, y : x/y,
-    'mul': lambda x, y : x*y,
-    'add': lambda x, y : x + y,
-    'neg': lambda x    : -x,
-    'pow': lambda x, y : x**y,
-    'sin': lambda x    : sin(x),
-    'cos': lambda x    : cos(x),
-    'inv': lambda x: 1/x,
-    'sqrt': lambda x: x**0.5,
-    'pow3': lambda x: x**3
+    'sub': lambda x, y: x - y,
+    'div': lambda x, y: x / y,
+    'mul': lambda x, y: x * y,
+    'add': lambda x, y: x + y,
+    'neg': lambda x: -x,
+    'pow': lambda x, y: x ** y,
+    'sin': lambda x: sin(x),
+    'cos': lambda x: cos(x),
+    'inv': lambda x: 1 / x,
+    'sqrt': lambda x: x ** 0.5,
+    'pow3': lambda x: x ** 3
 }
 est_gp.fit(X_train, y_train)
-print('R2:',est_gp.score(X_test,y_test))
+print('R2:', est_gp.score(X_test, y_test))
 next_e = sympify((est_gp._program), locals=converter)
-next_e
+
 
 # Preprocessing Log, Scale, Standardize (mean, median), Normalize
-from sklearn.linear_model import ElasticNet
-
-X= ohlc2.iloc[:,:-2]
-y= ohlc2['sign']
-regr = ElasticNet(random_state=0)
-regr.fit(X, y)
-
-print(regr.coef_)
-
-print(regr.intercept_)
-
-print(regr.predict([[0, 0]]))
-# Model Training  , maquina de soporte vectorial, red neuronal, regresion logicstica multiple
-from collections import Counter
-
-print(X.shape, y .shape)
-print(Counter(y))
-
-# define the multinomial logistic regression model
 from sklearn.linear_model import LogisticRegression
-model = LogisticRegression(multi_class='multinomial', solver='lbfgs')
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+X = ohlc2.iloc[:, 1:-2]
+y = ohlc2['sign']
 
-model.fit(X, y)
+clf = LogisticRegression(random_state=0,penalty= 'elasticnet',solver= 'saga',l1_ratio=1).fit(X, y)
+clf.predict(X[:2, :])
+
+clf.predict_proba(X[:2, :])
+
+
+clf.score(X, y)
+
+
+
 # Model Evaluation
 
 # Model Explain-ability por como salió y significado de lo que se obtuvo.
